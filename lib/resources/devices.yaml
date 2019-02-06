@@ -26,8 +26,8 @@
         size: 1080x1920
         resize: 80%
         resources:
-          statusbar: resources/android/1080/statusbar.png
-          navbar: resources/android/1080/navbar.png
+          statusbar: resources/android/1080/statusbar_purple.png
+          navbar: resources/android/1080/navbar_9.png
           frame: resources/android/phones/Nexus_5X.png
         offset: -4-9
         phones:
