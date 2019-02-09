@@ -41,7 +41,7 @@ Future<void> run([String configPath = kConfigFileName]) async {
     for (final _emulator in config['devices']['android']) {
       emulator(_emulator, true);
       for (final locale in config['locales']) {
-        for (final testPath in config['tests']) {
+        for (final testPath in config['tests'][locale]) {
           print(
               'Capturing screenshots with test $testPath on emulator $_emulator in locale $locale ...');
           screenshots(testPath, stagingDir);
