@@ -60,7 +60,7 @@ Future<void> run([String configPath = kConfigFileName]) async {
     for (final simulatorName in config['devices']['ios']) {
       simulator(simulatorName, true);
       for (final locale in config['locales']) {
-        for (final testPath in config['tests']) {
+        for (final testPath in config['tests'][locale]) {
           print(
               'Capturing screenshots with test $testPath on simulator $simulatorName in locale $locale ...');
           screenshots(testPath, stagingDir);

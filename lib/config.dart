@@ -68,10 +68,12 @@ class Config {
       }
     }
 
-    for (String test in config['tests']) {
-      if (!await File(test).exists()) {
-        stderr.write('Missing test: $test from $configPath not found.\n');
-        exit(1);
+    for (String locale in config['locales']) {
+      for (String test in config['tests'][locale]) {
+        if (!await File(test).exists()) {
+          stderr.write('Missing test: $test from $configPath not found.\n');
+          exit(1);
+        }
       }
     }
 
