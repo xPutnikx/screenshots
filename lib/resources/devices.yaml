@@ -4,7 +4,7 @@
         size: 1242x2208
         resize: 75%
         resources:
-          statusbar: resources/ios/1242/statusbar_black.png
+          statusbar: resources/ios/1242/statusbar_purple.png
           frame: resources/ios/phones/iPhone_7_Plus_Silver.png
         offset: -0-0
         phones:
