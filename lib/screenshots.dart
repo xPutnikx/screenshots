@@ -68,7 +68,7 @@ Future<void> run([String configPath = kConfigFileName]) async {
               devices, config, DeviceType.ios, simulatorName, locale);
         }
       }
-      simulator(simulatorName, false);
+//      simulator(simulatorName, false);
     }
 }
 
