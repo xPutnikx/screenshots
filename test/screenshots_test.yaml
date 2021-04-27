@@ -1,0 +1,35 @@
+# Screen capture tests
+tests:
+  - test_driver/main.dart
+#  - main2.dart
+
+# Interim location of screenshots from tests before processing
+staging: /tmp/screenshots
+
+# A list of locales supported in app
+locales:
+#  - fr-CA
+  - en-US
+#  - de-DE
+
+# A list of devices to emulate
+devices:
+  ios:
+    iPhone 5c:
+      frame: false
+    iPhone X:
+#    iPhone 7 Plus:
+#      frame: false
+#    - iPad Pro (12.9-inch) (2nd generation)
+#   "iPhone 6",
+#   "iPhone 6 Plus",
+#   "iPhone 5",
+#   "iPhone 4s",
+#   "iPad Retina",
+#   "iPad Pro"
+  android:
+#    Nexus 5X: # root disabled
+    Nexus 6P:
+
+# Frame screenshots
+frame: true

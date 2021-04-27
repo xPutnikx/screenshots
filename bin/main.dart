@@ -1,70 +1,134 @@
 import 'dart:io';
 
-import 'package:screenshots/screenshots.dart' as screenshots;
 import 'package:args/args.dart';
-import 'package:screenshots/utils.dart' as utils;
+import 'package:screenshots/screenshots.dart';
 
-const usage = 'usage: screenshots [--help] [--config <config file>]';
+const usage =
+    'usage: screenshots [-h] [-c <config file>] [-m <normal|recording|comparison|archive>] [-f <flavor>] [-b <true|false>] [-v]';
 const sampleUsage = 'sample usage: screenshots';
 
 void main(List<String> arguments) async {
   ArgResults argResults;
 
   final configArg = 'config';
+  final modeArg = 'mode';
+  final flavorArg = 'flavor';
+  final buildArg = 'build';
   final helpArg = 'help';
-  final ArgParser argParser = new ArgParser(allowTrailingOptions: false)
+  final verboseArg = 'verbose';
+  final ArgParser argParser = ArgParser(allowTrailingOptions: false)
     ..addOption(configArg,
         abbr: 'c',
-        defaultsTo: 'screenshots.yaml',
-        help: 'Location of config file.',
-        valueHelp: 'screenshots.yaml')
+        defaultsTo: kConfigFileName,
+        help: 'Path to config file.',
+        valueHelp: kConfigFileName)
+    ..addOption(modeArg,
+        abbr: 'm',
+        defaultsTo: 'normal',
+        help:
+            'If mode is recording, screenshots will be saved for later comparison. \nIf mode is comparison, screenshots will be compared with recorded.\nIf mode is archive, screenshots will be archived (and cannot be uploaded via fastlane).',
+        allowed: ['normal', 'recording', 'comparison', 'archive'],
+        valueHelp: 'normal|recording|comparison|archive')
+    ..addOption(flavorArg,
+        abbr: 'f', help: 'Flavor name.', valueHelp: 'flavor name')
+    ..addOption(buildArg,
+        abbr: 'b',
+        help:
+            'Force build and install of app for all devices.\nOverride settings in screenshots.yaml (if any).',
+        allowed: ['true', 'false'],
+        valueHelp: 'true|false')
+    ..addFlag(verboseArg,
+        abbr: 'v',
+        help: 'Noisy logging, including all shell commands executed.',
+        negatable: false)
     ..addFlag(helpArg,
-        help: 'Display this help information.', negatable: false);
+        abbr: 'h', help: 'Display this help information.', negatable: false);
   try {
     argResults = argParser.parse(arguments);
   } on ArgParserException catch (e) {
     _handleError(argParser, e.toString());
   }
 
-  // confirm os
-  switch (Platform.operatingSystem) {
-    case 'windows':
-      print(
-          'screenshots is not supported on windows. Try running on MacOS in cloud.');
-      exit(1);
-      break;
-    case 'linux':
-//      print(
-//          'screenshots is not supported on linux. Try running on MacOS in cloud.');
-//      exit(1);
-      break;
-    case 'macos':
-      break;
-    default:
-      throw 'unknown os: ${Platform.operatingSystem}';
+  // show help
+  if (argResults[helpArg]) {
+    _showUsage(argParser);
+    exit(0);
   }
 
-  if (!utils
-      .cmd('sh', ['-c', 'which convert && echo convert || echo not installed'],
-          '.', true)
-      .toString()
-      .contains('convert')) {
-    stderr.write(
-        '#############################################################\n');
-    stderr.write("# You have to install ImageMagick to use screenshots\n");
-    stderr.write(
-        "# Install it using 'brew update && brew install imagemagick'\n");
-    stderr.write("# If you don't have homebrew: goto http://brew.sh\n");
-    stderr.write(
-        '#############################################################\n');
+  // confirm os
+  if (!['windows', 'linux', 'macos'].contains(Platform.operatingSystem)) {
+    stderr.writeln('Error: unsupported os: ${Platform.operatingSystem}');
     exit(1);
   }
-  // validate args
-  final file = File(argResults[configArg]);
-  if (!await file.exists())
-    _handleError(argParser, "File not found: ${argResults[configArg]}");
 
-  await screenshots.run(argResults[configArg]);
+  // check imagemagick is installed
+  if (!await isImageMagicInstalled()) {
+    stderr.writeln(
+        '#############################################################');
+    stderr.writeln("# You have to install ImageMagick to use Screenshots");
+    if (Platform.isMacOS) {
+      stderr.writeln(
+          "# Install it using 'brew update && brew install imagemagick'");
+      stderr.writeln("# If you don't have homebrew: goto http://brew.sh");
+    }
+    stderr.writeln(
+        '#############################################################');
+    exit(1);
+  }
+
+  // validate args
+  if (!await File(argResults[configArg]).exists()) {
+    _handleError(argParser, "File not found: ${argResults[configArg]}");
+  }
+
+  // Check flutter command is found
+  // https://github.com/mmcc007/screenshots/issues/135
+  if (getExecutablePath('flutter', '.') == null) {
+    stderr.writeln(
+        '#############################################################');
+    stderr.writeln("# 'flutter' must be in the PATH to use Screenshots");
+    stderr.writeln("# You can usually add it to the PATH using"
+        "# export PATH='\$HOME/Library/flutter/bin:\$PATH'");
+    stderr.writeln(
+        '#############################################################');
+    exit(1);
+  }
+
+  final config = Config(configPath: argResults[configArg]);
+  if (config.isRunTypeActive(DeviceType.android)) {
+    // check required executables for android
+    if (!await isAdbPath()) {
+      stderr.writeln(
+          '#############################################################');
+      stderr.writeln("# 'adb' must be in the PATH to use Screenshots");
+      stderr.writeln("# You can usually add it to the PATH using"
+          "# export PATH='\$HOME/Library/Android/sdk/platform-tools:\$PATH'");
+      stderr.writeln(
+          '#############################################################');
+      exit(1);
+    }
+    if (!await isEmulatorPath()) {
+      stderr.writeln(
+          '#############################################################');
+      stderr.writeln("# 'emulator' must be in the PATH to use Screenshots");
+      stderr.writeln("# You can usually add it to the PATH using"
+          "# export PATH='\$HOME/Library/Android/sdk/emulator:\$PATH'");
+      stderr.writeln(
+          '#############################################################');
+      exit(1);
+    }
+  }
+
+  final success = await screenshots(
+    configPath: argResults[configArg],
+    mode: argResults[modeArg],
+    flavor: argResults[flavorArg],
+    isBuild: argResults.wasParsed(buildArg)
+        ? argResults[buildArg] == 'true' ? true : false
+        : null,
+    isVerbose: argResults.wasParsed(verboseArg) ? true : false,
+  );
+  exit(success ? 0 : 1);
 }
 
 void _handleError(ArgParser argParser, String msg) {

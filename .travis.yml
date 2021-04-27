@@ -1,0 +1,280 @@
+language: generic
+
+env:
+  global:
+    - FLUTTER_CHANNEL=stable
+    - FLUTTER_VERSION=1.9.1+hotfix.6-${FLUTTER_CHANNEL}
+    - DART_VERSION=2.5.0 # for unit tests
+
+matrix:
+  fast_finish: true
+
+jobs:
+  allow_failures:
+#    # don't wait for android to finish
+#    - env:
+#        - Run screenshots on Android
+#        - OS=linux
+    # don't wait for ios to finish
+    - env:
+      - Run screenshots on iOS
+      - OS=macos
+  include:
+
+    - stage: Testing
+      env:
+        - Unit tests
+        - OS=linux
+      os: linux
+#      language: dart
+#      dart: stable
+      cache:
+        directories:
+          - ${HOME}/.pub-cache
+
+      install:
+        - curl --connect-timeout 15 --retry 5 https://storage.googleapis.com/dart-archive/channels/stable/release/$DART_VERSION/sdk/dartsdk-linux-x64-release.zip > ${TRAVIS_HOME}/dartsdk.zip
+        - unzip ${TRAVIS_HOME}/dartsdk.zip -d ${TRAVIS_HOME} > /dev/null
+        - rm ${TRAVIS_HOME}/dartsdk.zip
+        - export DART_SDK="${TRAVIS_HOME}/dart-sdk"
+        - export PATH="$DART_SDK/bin:$PATH"
+        - export PATH="${TRAVIS_HOME}/.pub-cache/bin:$PATH"
+        - dart --version
+        - pub get # because no pubspec.lock
+        - export FLUTTER_ROOT=/ # tests currently require a flutter root
+        - pub run test test/all_tests.dart
+        # install image magick (already installed)
+        # install coverage tool
+        - pub global activate coverage
+
+      script:
+        - script/code_coverage.sh
+
+      after_success: bash <(curl -s https://codecov.io/bash) -f coverage/lcov.info
+
+    - stage: Testing
+#      # run on master or PRs (ignore other branches)
+#      if: branch = master
+      env:
+        - Run screenshots on iOS
+        - OS=macos
+      os: osx
+      #osx_image: xcode10.2 # macOS 10.14, JDK 12+33
+      #osx_image: xcode10.1 # macOS 10.13, JDK 11.0.1+13
+      # the following osx_image fixes the JDK module problem, has iPhone XS Max
+      # but doesn't have iPad Pro (12.9-inch) (3rd generation). So for now we exclude the
+      # iPad Pro (12.9-inch) (3rd generation) in screenshots.yaml
+#      osx_image: xcode10 # macOS 10.13, JDK 10.0.2+13
+      osx_image: xcode11.2 # macOS 10.14, JDK 13.0.1
+      cache:
+        directories:
+          - ${HOME}/.pub-cache
+
+      before_install:
+        - xcrun simctl list devices --json
+        - xcrun simctl list devicetypes
+        - xcrun simctl list runtimes
+
+        # Install flutter on macOS
+        - wget --quiet --output-document=flutter.zip https://storage.googleapis.com/flutter_infra/releases/${FLUTTER_CHANNEL}/${OS}/flutter_${OS}_v${FLUTTER_VERSION}.zip && unzip -qq flutter.zip > /dev/null && rm flutter.zip
+        - export PATH="$PATH":"$HOME/.pub-cache/bin"
+        - export PATH=$PWD/flutter/bin:$PWD/flutter/bin/cache/dart-sdk/bin:$PATH
+
+      install:
+        - flutter doctor -v
+        # install ImageMagick
+        - export HOMEBREW_NO_AUTO_UPDATE=1
+        - brew install imagemagick
+        # install most current (released or unreleased) Screenshots
+        - pub global activate --source path .
+
+      script:
+        - cd example; screenshots -c screenshots_ios.yaml -v
+
+#
+#      before_deploy:
+#        # bundle artifacts for later deploy
+#        - zip -r $HOME/screenshots/screenshots.zip ios/fastlane/screenshots android/fastlane/metadata/android/*/images
+#        # Set up git user name and tag this commit
+##        - git config --local user.name "$GIT_USER_NAME"
+##        - git config --local user.email "$GIT_USER_EMAIL"
+##        - export TRAVIS_TAG=${TRAVIS_TAG:-$(date +'%Y%m%d%H%M%S')-$(git log --format=%h -1)}
+##        - git tag $TRAVIS_TAG
+#
+#      # deploy artifacts if tagged commit
+#      deploy:
+#        provider: releases
+#        skip_cleanup: true
+#        api_key:
+#          secure: wyPNNbjTFChWOGc/JiTpGhN490dRzz/qhU2T3CddZALjy4VN3LywennK3xnTOAq+FEYE9H/quP/SxkUX154al/lxeL6QuN5D0Ev2bL3lS9jyaoe0NOKx5GnNTzfv84taZPi768UF4rgYqzzdF8WJTCe0dlvDH7qKgH+dHIZGoB1dM/hhWMEXUv0uAZuFDkepxWHOLHsIABunkz428MEsSRCTdEWOsgdFiEl+DOC5ErmorgHazUWPpSwenz13kCLhU+wT2Fsek5tGBO6GT1Mvw8qrht3LUZBaBQJfx4yhdXQKtq0Dr+gI9a3sbF/3TKV0nRvDVA+KGmMLHT+fkRrz1xkGvrLnCDfkylDZlmn/IoQUkv4JwI+lJIXfUp40pMmSlFH1WKToWSjMsPSxv02fVYzxNZoxlno+qyKk4lfdROOSSYS5LjmMd+Lrvhmx7vNMCHl57fdXdKwgyJllxT/khMZTJv5IPQih1yi3m/hDw0s59IHYd22QHFoodcdAPy2xxeVh8VhzhucpesWAvoFZfgdTmPZXAzpMR4kEaeBb5f3Z/Eg3AypDPXg67kXwFqTRL+ZqDzOFynZYJML8RbsZd/nqU5TYc0Ocmh0YMA3v0Z43wuZMshXOXujl8z3zmnwzV/QmFP0U/phOGa9SmvKtRyGQoTGtIXoPWdXrRpgm3F4=
+#        file:
+#          - $HOME/screenshots/screenshots.zip
+#        on:
+#          tags: true
+
+    - stage: Testing
+      # run on master or PRs (ignore other branches)
+      # if: branch = master
+      env:
+        - Run screenshots on Android
+        - OS=linux
+#      dist: trusty # defaults to java 1.8
+#      os: linux
+      language: generic
+      dist: bionic
+      cache:
+        directories:
+          - ${HOME}/.pub-cache
+#          - ${HOME}/.gradle/caches/
+#          - ${HOME}/.gradle/wrapper/
+
+      before_install:
+        # envs
+        - API=28
+        - ABI=x86
+        - GOO=default
+        - ANDROID_TOOLS=4333796 # android-28
+        - ANDROID_HOME=${HOME}/android-sdk
+        - GRAVIS="https://raw.githubusercontent.com/DanySK/Gravis-CI/master/"
+        - JDK="1.8" # the JDK used for running tests
+        - TOOLS=${ANDROID_HOME}/tools
+        # PATH order is incredibly important. e.g. the 'emulator' script exists in more than one place!
+        - PATH=${ANDROID_HOME}:${ANDROID_HOME}/emulator:${TOOLS}:${TOOLS}/bin:${ANDROID_HOME}/platform-tools:${PATH}
+        - FLUTTER_CHANNEL=stable
+        - FLUTTER_VERSION=1.9.1+hotfix.6-${FLUTTER_CHANNEL}
+        - FLUTTER_HOME=${HOME}/flutter
+        - PATH=${HOME}/.pub-cache/bin:${PATH}
+        - PATH=${FLUTTER_HOME}/bin:${FLUTTER_HOME}/bin/cache/dart-sdk/bin:${PATH}
+
+        - java -version
+
+        # Set up KVM
+        - sudo apt-get -y --no-install-recommends install bridge-utils libpulse0 libvirt-bin qemu-kvm virtinst ubuntu-vm-builder > /dev/null
+        # add travis user to groups
+        - sudo adduser $USER libvirt
+        - sudo adduser $USER kvm
+
+        # Set up JDK 8 for Android SDK
+        - curl "${GRAVIS}.install-jdk-travis.sh" --output ~/.install-jdk-travis.sh
+        - export TARGET_JDK="${JDK}"
+        - JDK="1.8" # used when running sdkmanager
+        - source ~/.install-jdk-travis.sh
+        - wget -q "https://dl.google.com/android/repository/sdk-tools-linux-$ANDROID_TOOLS.zip" -O android-sdk-tools.zip
+        - unzip -q android-sdk-tools.zip -d ${ANDROID_HOME}
+        - rm android-sdk-tools.zip
+
+        # Avoid harmless sdkmanager warning
+        - mkdir ~/.android
+        - echo 'count=0' > ~/.android/repositories.cfg
+
+        # Accept licenses before installing components, no need to echo y for each component
+        - yes | sdkmanager --licenses >/dev/null
+
+
+      install:
+        # Download SDK tools
+        - sdkmanager "platform-tools" >/dev/null
+        - sdkmanager "tools" >/dev/null # A second time per Travis docs, gets latest versions
+        - sdkmanager "build-tools;28.0.3" >/dev/null # Implicit gradle dependency - gradle drives changes
+        - sdkmanager "platforms;android-$API" >/dev/null # We need the API of the emulator we will run
+        - sdkmanager "platforms;android-28" >/dev/null # We need the API of the current compileSdkVersion from gradle.properties  -
+
+        - sdkmanager "emulator" >/dev/null
+        - ${ANDROID_HOME}/emulator/emulator -version
+
+        - sdkmanager "extras;android;m2repository" >/dev/null
+        - sdkmanager "system-images;android-$API;$GOO;$ABI" >/dev/null # install system images for emulator
+
+        # Create an Android emulator
+        #  - echo no | avdmanager --verbose create avd --force -n test -k "system-images;android-$API;$GOO;$ABI" -c 10M
+        - echo no | avdmanager --verbose create avd --force -n test -k "system-images;android-$API;$GOO;$ABI"
+        #  - EMU_PARAMS="
+        #      -verbose
+        #      -no-snapshot
+        #      -no-window
+        #      -no-audio
+        #      -no-boot-anim
+        #      -camera-back none
+        #      -camera-front none
+        #      -selinux permissive
+        #      -qemu -m 2048"
+        - EMU_PARAMS="
+          -avd test
+          -no-window
+          -no-audio
+          "
+#        - EMU_COMMAND="emulator"
+        - EMU_COMMAND="emulator-headless"
+        # This double "sudo" monstrosity is used to have Travis execute the
+        # emulator with its new group permissions and help preserve the rule
+        # of least privilege.
+        - sudo -E sudo -u $USER -E bash -c "${ANDROID_HOME}/emulator/${EMU_COMMAND} ${EMU_PARAMS} &"
+
+        # install flutter (while emulator is starting)
+        - wget --quiet --output-document=flutter.tar.xz https://storage.googleapis.com/flutter_infra/releases/${FLUTTER_CHANNEL}/linux/flutter_linux_v${FLUTTER_VERSION}.tar.xz
+        - tar xf flutter.tar.xz -C $(dirname ${FLUTTER_HOME})
+        - rm flutter.tar.xz
+
+        # Switch back to our target JDK version to build and run tests
+        - JDK="${TARGET_JDK}"
+        - source ~/.install-jdk-travis.sh
+
+        - flutter doctor -v
+
+        # Install image magick (already installed)
+
+      before_script:
+        # install most current (released or unreleased) Screenshots
+        - pub global activate --source path .
+        # wait for emulator to finish startup
+        - ./script/android-wait-for-emulator.sh
+        # unlock screen
+#        - adb shell input keyevent 82 &
+        # checks made by daemon to decide if running device is emulator or real
+        - adb shell getprop ro.product.cpu.abi # 'x86_64' (device)
+        - adb shell getprop ro.hardware # 'ranchu' (emulator)
+        - adb shell getprop ro.build.characteristics # 'emulator' (emulator)
+        - adb shell getprop ro.build.version.release # '9' (emulator)
+        - adb shell getprop ro.build.version.sdk # '28' (emulator))
+        - adb shell getprop
+
+      script:
+        - (cd example; screenshots -c screenshots_android.yaml -v) # ignore cd
+
+      before_cache:
+#        - rm -f $HOME/.gradle/caches/modules-2/modules-2.lock
+#        - curl "${GRAVIS}.clean_gradle_cache.sh" --output ~/.clean_gradle_cache.sh
+#        - bash ~/.clean_gradle_cache.sh
+#        - env
+        - pwd
+        - echo GRADLE_VERSION = $GRADLE_VERSION
+        - ls -la
+#        - find .
+        - GRADLE_VERSION=$(./example/android/gradlew -version | grep Gradle | awk '{print $2}')
+        - echo GRADLE_VERSION = $GRADLE_VERSION
+        - echo $HOME
+        - echo ~
+#        - find ${HOME}/.gradle/caches || echo -n
+        - |
+          if [[ ! -z "$GRADLE_VERSION" ]];
+          then
+            rm -rf ${HOME}/.gradle/caches/$GRADLE_VERSION/
+          fi
+        - rm -rf ${HOME}/.gradle/caches/transforms-1
+        - rm -rf ${HOME}/.gradle/caches/journal-1
+        - find ${HOME}/.gradle/caches/ -name "*.lock" -type f -delete || echo -n
+
+      before_deploy:
+        # bundle artifacts for later deploy
+        - zip -r $HOME/screenshots.zip example/android/fastlane/metadata/android/*/images
+
+      # deploy artifacts if tagged commit
+      deploy:
+        provider: releases
+        skip_cleanup: true
+        api_key:
+          secure: wyPNNbjTFChWOGc/JiTpGhN490dRzz/qhU2T3CddZALjy4VN3LywennK3xnTOAq+FEYE9H/quP/SxkUX154al/lxeL6QuN5D0Ev2bL3lS9jyaoe0NOKx5GnNTzfv84taZPi768UF4rgYqzzdF8WJTCe0dlvDH7qKgH+dHIZGoB1dM/hhWMEXUv0uAZuFDkepxWHOLHsIABunkz428MEsSRCTdEWOsgdFiEl+DOC5ErmorgHazUWPpSwenz13kCLhU+wT2Fsek5tGBO6GT1Mvw8qrht3LUZBaBQJfx4yhdXQKtq0Dr+gI9a3sbF/3TKV0nRvDVA+KGmMLHT+fkRrz1xkGvrLnCDfkylDZlmn/IoQUkv4JwI+lJIXfUp40pMmSlFH1WKToWSjMsPSxv02fVYzxNZoxlno+qyKk4lfdROOSSYS5LjmMd+Lrvhmx7vNMCHl57fdXdKwgyJllxT/khMZTJv5IPQih1yi3m/hDw0s59IHYd22QHFoodcdAPy2xxeVh8VhzhucpesWAvoFZfgdTmPZXAzpMR4kEaeBb5f3Z/Eg3AypDPXg67kXwFqTRL+ZqDzOFynZYJML8RbsZd/nqU5TYc0Ocmh0YMA3v0Z43wuZMshXOXujl8z3zmnwzV/QmFP0U/phOGa9SmvKtRyGQoTGtIXoPWdXrRpgm3F4=
+        file:
+          - $HOME/screenshots.zip
+        on:
+          tags: true
